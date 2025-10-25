@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trợ lý Tư vấn Hệ thống Chấm điểm</title>
+    <!-- Tải Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        .chat-container {
+            max-width: 800px;
+            height: 85vh; /* Chiều cao cố định cho chatbox */
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        #chatDisplay {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            background-color: white;
+            border-radius: 0.75rem 0.75rem 0 0;
+        }
+        #userInputContainer {
+            padding: 1rem;
+            background-color: #ffffff;
+            border-top: 1px solid #e5e7eb;
+            border-radius: 0 0 0.75rem 0.75rem;
+        }
+        .message-user {
+            background-color: #3b82f6; /* Blue 600 */
+            color: white;
+            border-radius: 0.75rem 0.75rem 0 0.75rem;
+        }
+        .message-bot {
+            background-color: #e5e7eb; /* Gray 200 */
+            color: #1f2937; /* Gray 800 */
+            border-radius: 0.75rem 0.75rem 0.75rem 0;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 1.25rem;
+            height: 1.25rem;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex items-center justify-center">
+
+<div class="chat-container w-full rounded-xl">
+
+    <!-- Header -->
+    <div class="p-4 bg-blue-600 text-white rounded-t-xl text-center">
+        <h1 class="text-xl font-bold">Trợ lý Tư vấn Hệ thống Chấm điểm</h1>
+        <p class="text-sm opacity-80">Hỏi về Auto Grading, Semantic Evaluation, BERTScore, Sentence-BERT, v.v.</p>
+    </div>
+
+    <!-- Khu vực hiển thị chat -->
+    <div id="chatDisplay">
+        <!-- Tin nhắn chào mừng -->
+        <div class="flex justify-start mb-4">
+            <div class="max-w-xs md:max-w-md p-3 message-bot">
+                Chào bạn! Tôi là trợ lý tư vấn cho hệ thống chấm điểm tự động của bạn. Tôi có thể giải thích về **BERTScore**, **Sentence-BERT** hay cách **Microservice chấm điểm/feedback** hoạt động. Bạn muốn hỏi gì?
+            </div>
+        </div>
+    </div>
+
+    <!-- Khu vực nhập liệu -->
+    <div id="userInputContainer" class="flex items-center">
+        <input type="text" id="userInput" placeholder="Nhập câu hỏi của bạn..."
+               class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 mr-3">
+        <button id="sendButton" class="p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center">
+            <svg id="sendIcon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            </svg>
+            <div id="loadingSpinner" class="spinner hidden"></div>
+        </button>
+    </div>
+</div>
+
+<script>
+    // Khóa API được hardcode để sử dụng cho mục đích phát triển cục bộ khi __initial_gemini_api_key không tồn tại.
+    const HARDCODED_API_KEY = "AIzaSyDQriDXZlI6XNVn91cyoFUyz1xSkBhJ0VA";
+
+    // Lấy API Key: Ưu tiên biến môi trường Canvas, nếu không có thì dùng khóa hardcode.
+    let apiKey = (typeof __initial_gemini_api_key !== 'undefined')
+        ? __initial_gemini_api_key
+        : HARDCODED_API_KEY;
+
+    let apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+    const chatDisplay = document.getElementById('chatDisplay');
+    const userInput = document.getElementById('userInput');
+    const sendButton = document.getElementById('sendButton');
+    const sendIcon = document.getElementById('sendIcon');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+
+    // Loại bỏ các biến liên quan đến giao diện nhập/lưu/xóa API Key cũ
+    // const apiKeySetup = document.getElementById('apiKeySetup');
+    // const localApiKeyInput = document.getElementById('localApiKeyInput');
+    // const saveApiKeyButton = document.getElementById('saveApiKeyButton');
+    // const deleteApiKeyButton = document.getElementById('deleteApiKeyButton');
+    // const apiKeyStatus = document.getElementById('apiKeyStatus');
+
+    let chatHistory = [];
+
+    // --- Logic quản lý API Key cho môi trường cục bộ (đã loại bỏ) ---
+    // Các hàm checkApiKeyStatus, saveApiKeyButton.addEventListener, deleteLocalApiKey đã bị xóa.
+
+    // Hàm thêm tin nhắn vào giao diện
+    function appendMessage(sender, text) {
+        const messageWrapper = document.createElement('div');
+        messageWrapper.className = `flex mb-4 ${sender === 'user' ? 'justify-end' : 'justify-start'}`;
+
+        const messageBubble = document.createElement('div');
+        messageBubble.className = `max-w-xs md:max-w-md p-3 shadow-md text-sm ${sender === 'user' ? 'message-user' : 'message-bot'}`;
+
+        // Xử lý markdown đơn giản cho phản hồi của bot
+        let htmlText = text;
+        if (sender === 'bot') {
+            // Chuyển đổi in đậm
+            htmlText = htmlText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Chuyển đổi dòng mới thành <br>
+            htmlText = htmlText.replace(/\n/g, '<br>');
+        }
+
+        messageBubble.innerHTML = htmlText;
+        messageWrapper.appendChild(messageBubble);
+        chatDisplay.appendChild(messageWrapper);
+        chatDisplay.scrollTop = chatDisplay.scrollHeight; // Cuộn xuống tin nhắn mới nhất
+    }
+
+    // Hàm xử lý việc gửi tin nhắn
+    async function sendMessage() {
+        const userMessage = userInput.value.trim();
+
+        if (!userMessage) return;
+
+        // Kiểm tra API Key: nếu không có khóa nào (cả từ Canvas và hardcoded) thì báo lỗi
+        if (!apiKey) {
+            appendMessage('bot', '🛑 Lỗi cấu hình: Không tìm thấy Gemini API Key. Vui lòng kiểm tra lại mã nguồn.');
+            return;
+        }
+
+        // 1. Hiển thị tin nhắn người dùng
+        appendMessage('user', userMessage);
+
+        // 2. Thêm vào lịch sử chat
+        chatHistory.push({ role: "user", parts: [{ text: userMessage }] });
+
+        // 3. Xóa input và vô hiệu hóa nút
+        userInput.value = '';
+        sendButton.disabled = true;
+        sendIcon.classList.add('hidden');
+        loadingSpinner.classList.remove('hidden');
+
+        // 4. Tạo tin nhắn loading cho bot
+        const loadingMessage = document.createElement('div');
+        loadingMessage.className = 'flex justify-start mb-4';
+        loadingMessage.innerHTML = `<div id="botLoading" class="p-3 message-bot shadow-md text-sm"><div class="spinner"></div> Đang tìm kiếm...</div>`;
+        chatDisplay.appendChild(loadingMessage);
+        chatDisplay.scrollTop = chatDisplay.scrollHeight;
+
+        try {
+            // Định nghĩa System Instruction
+            const systemPrompt = `Bạn là Trợ lý Tư vấn Kỹ thuật cho Hệ thống Chấm điểm Tự động. Nhiệm vụ của bạn là giải thích các khái niệm kỹ thuật như BERTScore, Sentence-BERT, Semantic Evaluation và chức năng của Microservice chấm điểm/feedback. Trả lời bằng tiếng Việt.`;
+
+            // Chuẩn bị Payload cho API
+            const payload = {
+                contents: chatHistory,
+                // Sử dụng Google Search Grounding để đảm bảo độ chính xác của thông tin kỹ thuật
+                tools: [{ "google_search": {} }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+
+            // 5. Thực hiện gọi API với Exponential Backoff
+            const maxRetries = 3;
+            let botResponseText = "Xin lỗi, đã xảy ra lỗi không xác định.";
+            let lastError = null;
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        // Thêm thông tin lỗi 403 cụ thể để dễ debug
+                        const errorDetail = (response.status === 403) ? "Lỗi 403: API Key không hợp lệ hoặc thiếu quyền." : `API call failed with status ${response.status}`;
+                        throw new Error(errorDetail);
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        botResponseText = candidate.content.parts[0].text;
+                        break; // Thành công, thoát vòng lặp
+                    }
+                    throw new Error("API response structure is invalid or content is missing.");
+
+                } catch (error) {
+                    lastError = error;
+                    console.error(`Lỗi lần thử ${i + 1}:`, error);
+                    if (i < maxRetries - 1) {
+                        // Áp dụng Exponential Backoff
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                }
+            }
+
+            // Nếu tất cả các lần thử đều thất bại
+            if (botResponseText === "Xin lỗi, đã xảy ra lỗi không xác định.") {
+                botResponseText = `Xin lỗi, không thể kết nối đến dịch vụ. Vui lòng thử lại sau. (Lỗi: ${lastError ? lastError.message : 'Không rõ'})`;
+            }
+
+            // 6. Xóa tin nhắn loading
+            const loadingDiv = document.getElementById('botLoading');
+            if (loadingDiv) loadingDiv.parentElement.remove();
+
+            // 7. Hiển thị tin nhắn phản hồi
+            appendMessage('bot', botResponseText);
+
+            // 8. Cập nhật lịch sử chat với phản hồi của bot
+            chatHistory.push({ role: "model", parts: [{ text: botResponseText }] });
+
+        } catch (error) {
+            console.error("Lỗi xử lý chat:", error);
+            // Hiển thị lỗi cuối cùng
+            const loadingDiv = document.getElementById('botLoading');
+            if (loadingDiv) loadingDiv.parentElement.remove();
+            appendMessage('bot', `Đã xảy ra lỗi nghiêm trọng: ${error.message}. Vui lòng kiểm tra console.`);
+        } finally {
+            // 9. Phục hồi trạng thái
+            sendButton.disabled = false;
+            sendIcon.classList.remove('hidden');
+            loadingSpinner.classList.add('hidden');
+            userInput.focus();
+        }
+    }
+
+    // Gắn sự kiện cho nút Gửi
+    sendButton.addEventListener('click', sendMessage);
+
+    // Gắn sự kiện cho phím Enter
+    userInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Ngăn hành vi xuống dòng mặc định
+            sendMessage();
+        }
+    });
+
+    // Tự động focus vào input khi tải trang
+    window.onload = () => {
+        userInput.focus();
+    };
+</script>
+
+</body>
+</html>
