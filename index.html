@@ -411,7 +411,29 @@
 
         // Kiểm tra xem có tin nhắn, ảnh, hoặc audio nào không
         if (!userMessage && !uploadedImage.data && !uploadedAudio.data) return;
+        //xử lý câu hỏi về giờ hiện tại
+        const timeKeywords = ["giờ", "thời gian", "mấy giờ rồi", "bây giờ là mấy giờ"];
+        const isTimeQuery = timeKeywords.some(keyword => userMessage.toLowerCase().includes(keyword));
+        if (isTimeQuery && !uploadedImage.data && !uploadedAudio.data) {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+            });
+            const dateString = now.toLocaleDateString('vi-VN', {weekday: 'long', month: 'long' , day: 'numeric' , year: 'numeric'});
+            const botResponseText = `Giờ hiện tại theo hệ thống của bạn là **${timeString}** ngày ${dateString}.`;
 
+            //2. Hiển thị tin nhắn người dùng và bot
+            appendMessage('user', userMessage);
+            appendMessage('bot', botResponseText);
+
+            //3. reset giao diện
+            userInput.value = '';
+            chatDisplay.scrollTop = chatDisplay.scrollHeight;
+            return;
+        }
         // 1. Kiểm tra API Key và URL
         if (!apiKey || !apiUrl) {
             appendMessage('bot', '🛑 Lỗi cấu hình: Không tìm thấy Gemini API Key. Vui lòng kiểm tra lại cấu hình.');
