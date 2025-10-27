@@ -20,8 +20,8 @@
             background-image: url("Screenshot_20250618_200427_Drive.jpg");
             background-attachment: fixed;
             background-repeat: no-repeat;
-            background-position: top;
-            background-size: 75px 75px;
+            background-position: center top;
+            background-size: 120px 60px;
         }
         .chat-container {
             max-width: 800px;
@@ -125,7 +125,32 @@
 
 
     <!-- Khu vực nhập liệu -->
+    <div id="templatePreviewContainer" class="p-3 bg-gray-50 border-t border-gray-200 hidden">
+        <div class="flex items-center justify-between p-2 bg-white border rounded-lg shadow-sm">
+            <div class="flex items-center space-x-3 w-full">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span id="templateFileName" class="text-sm text-gray-700 font-medium truncate flex-grow">Tên file định dạng.txt</span>
+            </div>
+            <button id="removeTemplateButton" class="p-1 text-red-500 hover:bg-red-100 rounded-full transition-colors ml-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
     <div id="userInputContainer" class="flex items-end">
+
+        <div class="p-3">
+            <input type="file" id="templateInput" accept=".txt,.json,.pdf,audio/*,image/*" class="hidden">
+            <label for="templateInput" class="file-input-label text-gray-500 p-2 rounded-full flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            </label>
+        </div>
         <!-- Nút Tải ảnh -->
         <div class="p-3">
             <input type="file" id="imageInput" accept="image/*" class="hidden">
@@ -163,8 +188,6 @@
 
 <script>
     // KHÓA API CUNG CẤP BỞI NGƯỜI DÙNG.
-    // LƯU Ý: Việc hardcode API Key không được khuyến nghị vì lý do bảo mật,
-    // nhưng được thực hiện theo yêu cầu rõ ràng của người dùng.
     const USER_PROVIDED_API_KEY = "AIzaSyDQriDXZlI6XNVn91cyoFUyz1xSkBhJ0VA";
 
     // Lấy API Key: Ưu tiên biến môi trường Canvas, nếu không có thì dùng khóa do người dùng cung cấp.
@@ -189,36 +212,45 @@
     const imagePreview = document.getElementById('imagePreview');
     const removeImageButton = document.getElementById('removeImageButton');
 
-    // Phần tử Audio (MỚI)
+    // Phần tử Audio
     const audioInput = document.getElementById('audioInput');
     const audioPreviewContainer = document.getElementById('audioPreviewContainer');
     const audioPreview = document.getElementById('audioPreview');
     const removeAudioButton = document.getElementById('removeAudioButton');
 
+    // PHẦN TỬ MỚI CHO FILE ĐỊNH DẠNG (TEMPLATE)
+    const templateInput = document.getElementById('templateInput');
+    const templatePreviewContainer = document.getElementById('templatePreviewContainer');
+    const templateFileName = document.getElementById('templateFileName');
+    const removeTemplateButton = document.getElementById('removeTemplateButton');
 
     let chatHistory = [];
     let uploadedImage = {
         data: null,
         mimeType: null,
-        url: null // Dùng để hiển thị preview
+        url: null
     };
-    // Biến trạng thái cho Audio (MỚI)
     let uploadedAudio = {
         data: null,
         mimeType: null,
         url: null
     };
+    let uploadedTemplate = {
+        data: null,
+        mimeType: null,
+        name: null
+    };
 
     /**
      * Chuyển đổi Blob/File thành chuỗi Base64.
-     * @param {File} file - File ảnh hoặc audio được tải lên.
+     * @param {File} file - File ảnh, audio hoặc template được tải lên.
      * @returns {Promise<string>} Chuỗi Base64 data (chỉ data, không có prefix).
      */
     function fileToBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => {
-                // Loại bỏ phần prefix "data:image/jpeg;base64," hoặc "data:audio/mp3;base64,"
+                // Loại bỏ phần prefix "data:image/jpeg;base64,"
                 const base64String = reader.result.split(',')[1];
                 resolve(base64String);
             };
@@ -227,127 +259,10 @@
         });
     }
 
-    // --- LOGIC XỬ LÝ ẢNH ---
-
-    /**
-     * Hàm xử lý khi người dùng chọn ảnh
-     */
-    imageInput.addEventListener('change', async function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        if (!file.type.startsWith('image/')) {
-            console.error('Vui lòng chọn một file hình ảnh.');
-            return;
-        }
-
-        // Giới hạn kích thước file (ví dụ: 5MB)
-        const maxSize = 5 * 1024 * 1024;
-        if (file.size > maxSize) {
-            appendMessage('bot', 'Lỗi: Kích thước file ảnh quá lớn (tối đa 5MB).');
-            return;
-        }
-
-        try {
-            // Xóa file audio nếu đang có
-            removeAudioButton.click();
-
-            const base64Data = await fileToBase64(file);
-            const imageUrl = URL.createObjectURL(file);
-
-            uploadedImage.data = base64Data;
-            uploadedImage.mimeType = file.type;
-            uploadedImage.url = imageUrl;
-
-            imagePreview.src = imageUrl;
-            imagePreviewContainer.classList.remove('hidden');
-            userInput.focus();
-
-        } catch (error) {
-            console.error("Lỗi khi chuyển đổi ảnh:", error);
-            appendMessage('bot', 'Lỗi: Không thể tải ảnh. Vui lòng kiểm tra kích thước và định dạng.');
-            e.target.value = null;
-        }
-    });
-
-    /**
-     * Hàm xóa ảnh đã tải lên
-     */
-    removeImageButton.addEventListener('click', function() {
-        if (uploadedImage.url) {
-            URL.revokeObjectURL(uploadedImage.url); // Giải phóng bộ nhớ
-        }
-        uploadedImage.data = null;
-        uploadedImage.mimeType = null;
-        uploadedImage.url = null;
-        imageInput.value = null; // Reset input file
-        imagePreviewContainer.classList.add('hidden');
-    });
-
-    // --- LOGIC XỬ LÝ AUDIO ---
-
-    /**
-     * Hàm xử lý khi người dùng chọn audio
-     */
-    audioInput.addEventListener('change', async function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        if (!file.type.startsWith('audio/')) {
-            console.error('Vui lòng chọn một file audio.');
-            return;
-        }
-
-        // Giới hạn kích thước file audio (ví dụ: 10MB cho audio)
-        const maxSize = 10 * 1024 * 1024;
-        if (file.size > maxSize) {
-            appendMessage('bot', 'Lỗi: Kích thước file audio quá lớn (tối đa 10MB).');
-            return;
-        }
-
-        try {
-            // Xóa file ảnh nếu đang có
-            removeImageButton.click();
-
-            const base64Data = await fileToBase64(file);
-            const audioUrl = URL.createObjectURL(file);
-
-            uploadedAudio.data = base64Data;
-            uploadedAudio.mimeType = file.type;
-            uploadedAudio.url = audioUrl;
-
-            audioPreview.src = audioUrl;
-            audioPreviewContainer.classList.remove('hidden');
-            userInput.focus();
-
-        } catch (error) {
-            console.error("Lỗi khi chuyển đổi audio:", error);
-            appendMessage('bot', 'Lỗi: Không thể tải audio. Vui lòng kiểm tra kích thước và định dạng.');
-            e.target.value = null;
-        }
-    });
-
-    /**
-     * Hàm xóa audio đã tải lên
-     */
-    removeAudioButton.addEventListener('click', function() {
-        if (uploadedAudio.url) {
-            URL.revokeObjectURL(uploadedAudio.url); // Giải phóng bộ nhớ
-        }
-        uploadedAudio.data = null;
-        uploadedAudio.mimeType = null;
-        uploadedAudio.url = null;
-        audioInput.value = null; // Reset input file
-        audioPreview.pause(); // Dừng phát nhạc
-        audioPreviewContainer.classList.add('hidden');
-    });
-
-    // --- LOGIC HIỂN THỊ VÀ GỬI TIN NHẮN ---
-
     /**
      * Hàm hiển thị nội dung media (nếu có) trong tin nhắn.
      * @param {object[]} parts - Mảng các phần nội dung (text, inlineData).
-     * @returns {string} HTML string chứa ảnh, audio (hoặc text đã được format).
+     * @returns {string} HTML string chứa ảnh, audio, file (hoặc text đã được format).
      */
     function processMessageParts(parts, sender) {
         let htmlContent = '';
@@ -362,8 +277,7 @@
                 htmlContent += text;
             } else if (part.inlineData) {
                 const mimeType = part.inlineData.mimeType;
-                const base64Data = part.inlineData.data;
-                const fileUrl = `data:${mimeType};base64,${base64Data}`;
+                const fileUrl = `data:${mimeType};base64,${part.inlineData.data}`;
 
                 if (mimeType.startsWith('image/')) {
                     // Hiển thị ảnh
@@ -371,6 +285,14 @@
                 } else if (mimeType.startsWith('audio/')) {
                     // Hiển thị audio
                     htmlContent += `<audio controls src="${fileUrl}" class="w-full my-2 rounded-lg"></audio>`;
+                } else {
+                    // Hiển thị file template dưới dạng tag
+                    htmlContent += `<div class="bg-gray-100 p-2 rounded-lg my-2 flex items-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-orange-500" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 4a1 1 0 011-1h3a1 1 0 110 2H7a1 1 0 01-1-1zm0 3a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm0 3a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="text-xs text-gray-700 font-medium">${mimeType} File</span>
+                </div>`;
                 }
             }
         }
@@ -393,7 +315,7 @@
             // Tin nhắn chào mừng hoặc lỗi
             messageBubble.innerHTML = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
         } else if (Array.isArray(content)) {
-            // Tin nhắn từ lịch sử chat (bao gồm cả ảnh/audio)
+            // Tin nhắn từ lịch sử chat (bao gồm cả ảnh/audio/template)
             messageBubble.innerHTML = processMessageParts(content, sender);
         }
 
@@ -403,18 +325,162 @@
     }
 
 
-    /**
-     * Hàm xử lý việc gửi tin nhắn và gọi API Gemini
-     */
+    // --- LOGIC XỬ LÝ ẢNH ---
+    imageInput.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            appendMessage('bot', 'Lỗi: Vui lòng chọn một file hình ảnh.');
+            return;
+        }
+        const maxSize = 5 * 1024 * 1024;
+        if (file.size > maxSize) {
+            appendMessage('bot', 'Lỗi: Kích thước file ảnh quá lớn (tối đa 5MB).');
+            return;
+        }
+
+        try {
+            removeAudioButton.click();
+            removeTemplateButton.click();
+
+            const base64Data = await fileToBase64(file);
+            const imageUrl = URL.createObjectURL(file);
+
+            uploadedImage.data = base64Data;
+            uploadedImage.mimeType = file.type;
+            uploadedImage.url = imageUrl;
+
+            imagePreview.src = imageUrl;
+            imagePreviewContainer.classList.remove('hidden');
+            userInput.focus();
+
+        } catch (error) {
+            console.error("Lỗi khi chuyển đổi ảnh:", error);
+            appendMessage('bot', 'Lỗi: Không thể tải ảnh. Vui lòng kiểm tra kích thước và định dạng.');
+            e.target.value = null;
+        }
+    });
+    removeImageButton.addEventListener('click', function() {
+        if (uploadedImage.url) {
+            URL.revokeObjectURL(uploadedImage.url);
+        }
+        uploadedImage.data = null;
+        uploadedImage.mimeType = null;
+        uploadedImage.url = null;
+        imageInput.value = null;
+        imagePreviewContainer.classList.add('hidden');
+    });
+
+    // --- LOGIC XỬ LÝ AUDIO ---
+    audioInput.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('audio/')) {
+            appendMessage('bot', 'Lỗi: Vui lòng chọn một file audio.');
+            return;
+        }
+
+        const maxSize = 10 * 1024 * 1024;
+        if (file.size > maxSize) {
+            appendMessage('bot', 'Lỗi: Kích thước file audio quá lớn (tối đa 10MB).');
+            return;
+        }
+
+        try {
+            removeImageButton.click();
+            removeTemplateButton.click();
+
+            const base64Data = await fileToBase64(file);
+            const audioUrl = URL.createObjectURL(file);
+
+            uploadedAudio.data = base64Data;
+            uploadedAudio.mimeType = file.type;
+            uploadedAudio.url = audioUrl;
+
+            audioPreview.src = audioUrl;
+            audioPreviewContainer.classList.remove('hidden');
+            userInput.focus();
+
+        } catch (error) {
+            console.error("Lỗi khi chuyển đổi audio:", error);
+            appendMessage('bot', 'Lỗi: Không thể tải audio. Vui lòng kiểm tra kích thước và định dạng.');
+            e.target.value = null;
+        }
+    });
+    removeAudioButton.addEventListener('click', function() {
+        if (uploadedAudio.url) {
+            URL.revokeObjectURL(uploadedAudio.url);
+        }
+        uploadedAudio.data = null;
+        uploadedAudio.mimeType = null;
+        uploadedAudio.url = null;
+        audioInput.value = null;
+        audioPreview.pause();
+        audioPreviewContainer.classList.add('hidden');
+    });
+
+    // --- LOGIC XỬ LÝ FILE ĐỊNH DẠNG (TEMPLATE) ---
+    templateInput.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const allowedMimeTypes = ['text/', 'application/json', 'application/pdf', 'audio/', 'image/'];
+        const isAllowed = allowedMimeTypes.some(type => file.type.startsWith(type) || file.name.endsWith('.txt') || file.name.endsWith('.json'));
+
+        if (!isAllowed) {
+            appendMessage('bot', 'Lỗi: Định dạng file định dạng không được hỗ trợ (chỉ chấp nhận Text, JSON, PDF, Audio, Image).');
+            return;
+        }
+
+        const maxSize = 2 * 1024 * 1024;
+        if (file.size > maxSize) {
+            appendMessage('bot', 'Lỗi: Kích thước file định dạng quá lớn (tối đa 2MB).');
+            return;
+        }
+
+        try {
+            removeImageButton.click();
+            removeAudioButton.click();
+
+            const base64Data = await fileToBase64(file);
+
+            uploadedTemplate.data = base64Data;
+            uploadedTemplate.mimeType = file.type;
+            uploadedTemplate.name = file.name;
+
+            templateFileName.textContent = file.name;
+            templatePreviewContainer.classList.remove('hidden');
+            userInput.focus();
+
+        } catch (error) {
+            console.error("Lỗi khi chuyển đổi file định dạng:", error);
+            appendMessage('bot', 'Lỗi: Không thể tải file định dạng.');
+            e.target.value = null;
+        }
+    });
+    removeTemplateButton.addEventListener('click', function() {
+        uploadedTemplate.data = null;
+        uploadedTemplate.mimeType = null;
+        uploadedTemplate.name = null;
+        templateInput.value = null;
+        templatePreviewContainer.classList.add('hidden');
+    });
+
+
+    // --- LOGIC GỬI TIN NHẮN (Đã sửa lỗi) ---
     async function sendMessage() {
         const userMessage = userInput.value.trim();
 
-        // Kiểm tra xem có tin nhắn, ảnh, hoặc audio nào không
-        if (!userMessage && !uploadedImage.data && !uploadedAudio.data) return;
-        //xử lý câu hỏi về giờ hiện tại
+        // 1. Kiểm tra input
+        if (!userMessage && !uploadedImage.data && !uploadedAudio.data && !uploadedTemplate.data) return;
+
+        // Xử lý Time Query (Đã sửa lỗi gọi hàm appendMessage)
         const timeKeywords = ["giờ", "thời gian", "mấy giờ rồi", "bây giờ là mấy giờ"];
         const isTimeQuery = timeKeywords.some(keyword => userMessage.toLowerCase().includes(keyword));
-        if (isTimeQuery && !uploadedImage.data && !uploadedAudio.data) {
+
+        if (isTimeQuery && !uploadedImage.data && !uploadedAudio.data && !uploadedTemplate.data) {
             const now = new Date();
             const timeString = now.toLocaleTimeString('vi-VN', {
                 hour: '2-digit',
@@ -422,19 +488,23 @@
                 second: '2-digit',
                 hour12: false,
             });
-            const dateString = now.toLocaleDateString('vi-VN', {weekday: 'long', month: 'long' , day: 'numeric' , year: 'numeric'});
+            const dateString = now.toLocaleDateString('vi-VN', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+            });
             const botResponseText = `Giờ hiện tại theo hệ thống của bạn là **${timeString}** ngày ${dateString}.`;
 
-            //2. Hiển thị tin nhắn người dùng và bot
+            // GỌI HÀM appendMessage ĐÃ ĐỊNH NGHĨA Ở TRÊN
             appendMessage('user', userMessage);
             appendMessage('bot', botResponseText);
 
-            //3. reset giao diện
             userInput.value = '';
             chatDisplay.scrollTop = chatDisplay.scrollHeight;
             return;
         }
-        // 1. Kiểm tra API Key và URL
+
         if (!apiKey || !apiUrl) {
             appendMessage('bot', '🛑 Lỗi cấu hình: Không tìm thấy Gemini API Key. Vui lòng kiểm tra lại cấu hình.');
             return;
@@ -443,12 +513,20 @@
         // --- Chuẩn bị Nội dung cho API ---
         const userParts = [];
 
-        // Thêm text vào parts nếu có
         if (userMessage) {
             userParts.push({ text: userMessage });
         }
 
-        // Thêm ảnh vào parts nếu có
+        if (uploadedTemplate.data && uploadedTemplate.mimeType) {
+            userParts.push({
+                inlineData: {
+                    mimeType: uploadedTemplate.mimeType,
+                    data: uploadedTemplate.data
+                }
+            });
+            userParts.push({ text: `Đây là file định dạng có tên "${uploadedTemplate.name}" mà tôi muốn bạn dùng để đánh giá/chấm điểm tệp media sau.` });
+        }
+
         if (uploadedImage.data && uploadedImage.mimeType) {
             userParts.push({
                 inlineData: {
@@ -458,7 +536,6 @@
             });
         }
 
-        // Thêm audio vào parts nếu có
         if (uploadedAudio.data && uploadedAudio.mimeType) {
             userParts.push({
                 inlineData: {
@@ -468,21 +545,23 @@
             });
         }
 
-        // 2. Hiển thị tin nhắn người dùng (có thể bao gồm ảnh/audio)
+        // 2. Hiển thị tin nhắn người dùng
         appendMessage('user', userParts);
 
         // 3. Cập nhật lịch sử chat
         chatHistory.push({ role: "user", parts: userParts });
 
-        // 4. Reset giao diện sau khi gửi
+        // 4. Reset giao diện
         userInput.value = '';
-        removeImageButton.click(); // Xóa ảnh đã tải lên
-        removeAudioButton.click(); // Xóa audio đã tải lên
+        removeImageButton.click();
+        removeAudioButton.click();
+        removeTemplateButton.click();
+
         sendButton.disabled = true;
         sendIcon.classList.add('hidden');
         loadingSpinner.classList.remove('hidden');
 
-        // 5. Tạo tin nhắn loading cho bot
+        // 5. Tạo tin nhắn loading
         const loadingMessage = document.createElement('div');
         loadingMessage.className = 'flex justify-start mb-4';
         const loadingDivId = 'botLoading-' + Date.now();
@@ -491,18 +570,17 @@
         chatDisplay.scrollTop = chatDisplay.scrollHeight;
 
         try {
-            // Định nghĩa System Instruction
-            const systemPrompt = ``;
+            const systemPrompt = `Bạn là MRS AI, một trợ lý chấm điểm và đánh giá chất lượng media.
+        Nếu người dùng tải lên một tệp media (ảnh/audio) kèm theo một tệp định dạng (template), hãy sử dụng thông tin trong tệp định dạng đó (ví dụ: tiêu chí, thang điểm, cấu trúc) để phân tích và đánh giá tệp media.
+        Đưa ra kết quả chấm điểm theo thang điểm 10 và giải thích ngắn gọn lý do tại sao.
+        Sử dụng tiếng Việt, thân thiện và chuyên nghiệp.`;
 
-            // Chuẩn bị Payload cho API
             const payload = {
                 contents: chatHistory,
-                // Sử dụng Google Search Grounding để đảm bảo độ chính xác của thông tin kỹ thuật
                 tools: [{ "google_search": {} }],
                 systemInstruction: { parts: [{ text: systemPrompt }] },
             };
 
-            // 6. Thực hiện gọi API với Exponential Backoff
             const maxRetries = 3;
             let botResponseText = "Xin lỗi, đã xảy ra lỗi không xác định.";
             let lastError = null;
@@ -544,6 +622,7 @@
                 botResponseText = `Xin lỗi, không thể kết nối đến dịch vụ sau ${maxRetries} lần thử. Vui lòng thử lại sau. (Lỗi cuối cùng: ${lastError ? lastError.message : 'Không rõ'})`;
             }
 
+
             // 7. Xóa tin nhắn loading
             const loadingDiv = document.getElementById(loadingDivId);
             if (loadingDiv) loadingDiv.parentElement.remove();
@@ -551,7 +630,7 @@
             // 8. Hiển thị tin nhắn phản hồi
             appendMessage('bot', botResponseText);
 
-            // 9. Cập nhật lịch sử chat với phản hồi của bot
+            // 9. Cập nhật lịch sử chat
             chatHistory.push({ role: "model", parts: [{ text: botResponseText }] });
 
         } catch (error) {
